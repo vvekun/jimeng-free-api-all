@@ -8,7 +8,6 @@ import token from './token.js';
 import models from './models.ts';
 import videos from './videos.ts';
 import video from './video.ts';
-import tasks from './tasks.ts';
 
 export default [
     {
@@ -30,6 +29,5 @@ export default [
     token,
     models,
     videos,
-    video,
-    tasks
+    video
 ];
