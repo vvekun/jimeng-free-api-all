@@ -3,7 +3,7 @@
 即梦 AI 免费 API 服务 - 支持文生图、图生图、视频生成的 OpenAI 兼容接口
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
-![Version](https://img.shields.io/badge/version-v0.9.0-green.svg)
+![Version](https://img.shields.io/badge/version-v0.9.1-green.svg)
 ![Node](https://img.shields.io/badge/node-%3E%3D16.0.0-brightgreen.svg)
 ![Docker](https://img.shields.io/badge/docker-ready-blue.svg)
 
@@ -22,6 +22,7 @@ Jimeng AI Free API 是一个逆向工程的 API 服务器，将即梦 AI（Jimen
 - 🎬 **视频生成**：jimeng-video-3.5-pro 等模型，支持首帧/尾帧控制
 - 🌊 **Seedance 2.0 / 2.0-fast / 2.0-fast-vip / 2.0-vip**：多模态智能视频生成，支持图片/视频/音频混合上传，@1、@2 占位符引用素材，fast 版本生成更快，VIP 版本为会员专属通道
 - 🌍 **国际版视频生成**：支持国际区域 Token（sg-/it-/jp-/hk- 等前缀），纯算法签名绕过 shark 反爬，支持普通视频（jimeng-video-3.0/3.0-pro/3.5-pro）与 Seedance 的同步/异步生成，VIP 模型同样支持
+- 🎯 **国际版 VIP 无水印下载**：VIP Token 自动获取无水印视频，权益 API 自动调用，水印状态自动检测
 - 🔗 **OpenAI 兼容**：完全兼容 OpenAI API 格式，无缝对接现有客户端
 - 🔄 **多账号支持**：支持多个 sessionid 轮询使用
 
@@ -51,6 +52,7 @@ Jimeng AI Free API 是一个逆向工程的 API 服务器，将即梦 AI（Jimen
 | 异步视频生成 | 提交任务立即返回，查询接口阻塞等待结果 | 所有视频模型 | ✅ 可用 |
 | 国际版视频生成 | 国际区域 Token 纯算法签名绕过 shark | jimeng-video-3.0, jimeng-video-3.0-pro, jimeng-video-3.5-pro, seedance-2.0-fast, seedance-2.0-pro, seedance-2.0-fast-vip, seedance-2.0-vip | ✅ 可用 |
 | 国际版异步视频 | 国际版普通视频 / Seedance 异步生成 | jimeng-video-3.0, jimeng-video-3.0-pro, jimeng-video-3.5-pro, seedance-2.0-fast, seedance-2.0-pro, seedance-2.0-fast-vip, seedance-2.0-vip | ✅ 可用 |
+| 国际版 VIP 无水印 | VIP Token 自动获取无水印视频 URL | 所有国际版视频模型 | ✅ 可用 |
 | Chat 接口 | OpenAI 兼容的对话接口 | 所有模型 | ✅ 可用 |
 
 ## 免责声明
@@ -889,7 +891,16 @@ Authorization: Bearer sessionid1,sessionid2,sessionid3
 
 ## 更新日志
 
-### v0.9.0 (2026-04-06) - 国际版普通视频生成 + 图片上传重构 + 移除旧版视频模型
+### v0.8.12 (2026-04-07) - 国际版 VIP 无水印视频下载
+
+- 🎯 **国际版 VIP 无水印下载**：VIP Token 自动获取无水印视频 URL，匹配真实浏览器下载流程
+  - `fetchHighQualityVideoUrl()` 新增权益 API 调用：`benefit_metadata` + `batch_get_user_benefit`
+  - 自动检测并记录视频 URL 水印状态：`display_watermark_busi_aigc`（免费/有水印）vs `display_watermark_aigc`（VIP/无水印）
+  - VIP 用户通过 `get_local_item_list` 获取的签名 CDN URL 自动指向无水印视频文件
+- 🔧 **视频 URL 提取重构**：`fetchHighQualityVideoUrl()` 从多路 early-return 改为统一变量 + 级联降级策略，支持提取后统一后处理
+- 🔧 **视频 URL 提取优先级优化**：新增 `common_attr.transcoded_video.origin.video_url` 作为最高优先级提取字段
+
+### v0.8.11 (2026-04-06) - 国际版普通视频生成 + 图片上传重构 + 移除旧版视频模型
 
 - 🌍 **国际版普通视频生成**：国际版同步/异步接口新增支持普通视频模型（`jimeng-video-3.0`、`jimeng-video-3.0-pro`、`jimeng-video-3.5-pro`），与 Seedance 统一入口
   - 新增 `generateInternationalVideo` / `generateInternationalVideoCore` 函数

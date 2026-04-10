@@ -1118,6 +1118,9 @@ async function fetchHighQualityVideoUrl(itemId: string, refreshToken: string): P
   try {
     logger.info(`尝试获取高质量视频下载URL，item_id: ${itemId}`);
 
+    const regionInfo = parseRegionFromToken(refreshToken);
+    const isInternational = regionInfo.isInternational || regionInfo.isUS;
+
     const result = await request("post", "/mweb/v1/get_local_item_list", refreshToken, {
       data: {
         item_id_list: [itemId],
@@ -1132,53 +1135,108 @@ async function fetchHighQualityVideoUrl(itemId: string, refreshToken: string): P
     const responseStr = JSON.stringify(result);
     logger.info(`get_local_item_list 响应大小: ${responseStr.length} 字符`);
 
+    // 提取视频URL（按优先级尝试多种策略）
+    let videoUrl: string | null = null;
+
     // 策略1: 从结构化字段中提取视频URL
     const itemList = result.item_list || result.local_item_list || [];
     if (itemList.length > 0) {
       const item = itemList[0];
-      const videoUrl =
+      videoUrl =
+        item?.common_attr?.transcoded_video?.origin?.video_url ||
         item?.result_url ||
         item?.video?.transcoded_video?.origin?.video_url ||
         item?.video?.download_url ||
         item?.video?.play_url ||
         item?.video?.url;
-
       if (videoUrl) {
-        logger.info(`从get_local_item_list结构化字段获取到高清视频URL: ${videoUrl}`);
-        return videoUrl;
+        logger.info(`从get_local_item_list结构化字段获取到高清视频URL`);
       }
     }
 
     // 策略2: 正则匹配 dreamnia.jimeng.com 高质量URL
-    const hqUrlMatch = responseStr.match(/https:\/\/v[0-9]+-dreamnia\.jimeng\.com\/[^"\s\\]+/);
-    if (hqUrlMatch && hqUrlMatch[0]) {
-      logger.info(`正则提取到高质量视频URL (dreamnia): ${hqUrlMatch[0]}`);
-      return hqUrlMatch[0];
+    if (!videoUrl) {
+      const hqUrlMatch = responseStr.match(/https:\/\/v[0-9]+-dreamnia\.jimeng\.com\/[^"\s\\]+/);
+      if (hqUrlMatch && hqUrlMatch[0]) {
+        videoUrl = hqUrlMatch[0];
+        logger.info(`正则提取到高质量视频URL (dreamnia)`);
+      }
     }
 
     // 策略3: 匹配任何 jimeng.com 域名的视频URL
-    const jimengUrlMatch = responseStr.match(/https:\/\/v[0-9]+-[^"\\]*\.jimeng\.com\/[^"\s\\]+/);
-    if (jimengUrlMatch && jimengUrlMatch[0]) {
-      logger.info(`正则提取到jimeng视频URL: ${jimengUrlMatch[0]}`);
-      return jimengUrlMatch[0];
+    if (!videoUrl) {
+      const jimengUrlMatch = responseStr.match(/https:\/\/v[0-9]+-[^"\\]*\.jimeng\.com\/[^"\s\\]+/);
+      if (jimengUrlMatch && jimengUrlMatch[0]) {
+        videoUrl = jimengUrlMatch[0];
+        logger.info(`正则提取到jimeng视频URL`);
+      }
     }
 
     // 策略4: 匹配任何视频URL（兜底）
-    const anyVideoUrlMatch = responseStr.match(/https:\/\/[^"\s\\]+\.(?:vlabvod|jimeng|capcut)\.com\/[^"\s\\]+/);
-    if (anyVideoUrlMatch && anyVideoUrlMatch[0]) {
-      logger.info(`从get_local_item_list提取到视频URL: ${anyVideoUrlMatch[0]}`);
-      return anyVideoUrlMatch[0];
+    if (!videoUrl) {
+      const anyVideoUrlMatch = responseStr.match(/https:\/\/[^"\s\\]+\.(?:vlabvod|jimeng|capcut)\.com\/[^"\s\\]+/);
+      if (anyVideoUrlMatch && anyVideoUrlMatch[0]) {
+        videoUrl = anyVideoUrlMatch[0];
+        logger.info(`从get_local_item_list提取到视频URL`);
+      }
     }
 
     // 策略5: 匹配国际版 CapCut CDN
-    const capcutUrlMatch = responseStr.match(/https:\/\/[^"\s\\]*capcut\.com\/[^"\s\\]+/);
-    if (capcutUrlMatch && capcutUrlMatch[0]) {
-      logger.info(`正则提取到国际版 CapCut 视频URL: ${capcutUrlMatch[0]}`);
-      return capcutUrlMatch[0];
+    if (!videoUrl) {
+      const capcutUrlMatch = responseStr.match(/https:\/\/[^"\s\\]*capcut\.com\/[^"\s\\]+/);
+      if (capcutUrlMatch && capcutUrlMatch[0]) {
+        videoUrl = capcutUrlMatch[0];
+        logger.info(`正则提取到国际版 CapCut 视频URL`);
+      }
     }
 
-    logger.warn(`未能从get_local_item_list响应中提取到视频URL`);
-    return null;
+    if (!videoUrl) {
+      logger.warn(`未能从get_local_item_list响应中提取到视频URL`);
+      return null;
+    }
+
+    // 国际版用户：调用权益API处理VIP去水印权益
+    // 真实浏览器流程：get_local_item_list → benefit_metadata → batch_get_user_benefit → 下载
+    // VIP用户的视频URL由服务端根据session的VIP状态决定，lr=display_watermark_aigc 实际为无水印版本
+    if (isInternational) {
+      try {
+        await request("post", "/commerce/v3/resource/benefit_metadata", refreshToken, {
+          data: {
+            query_list: [
+              { resource_type: "aigc", resource_id: "get_all", benefit_type_list: [] },
+              { resource_type: "normal_func", resource_id: "get_all", benefit_type_list: [] },
+            ],
+          },
+        });
+        logger.info(`国际版权益API benefit_metadata 调用完成`);
+      } catch (e) {
+        logger.warn(`国际版权益API benefit_metadata 调用失败: ${e.message}`);
+      }
+
+      try {
+        await request("post", "/commerce/v3/benefits/batch_get_user_benefit", refreshToken, {
+          data: {
+            query_list: [
+              { resource_type: "aigc", resource_id: "get_all", benefit_type_list: [] },
+              { resource_type: "normal_func", resource_id: "get_all", benefit_type_list: [] },
+            ],
+          },
+        });
+        logger.info(`国际版权益API batch_get_user_benefit 调用完成`);
+      } catch (e) {
+        logger.warn(`国际版权益API batch_get_user_benefit 调用失败: ${e.message}`);
+      }
+    }
+
+    // 检测水印状态并记录日志
+    if (videoUrl.includes("display_watermark_busi_aigc")) {
+      logger.warn(`视频URL包含免费账号水印标识 (display_watermark_busi_aigc)，视频将带有水印`);
+    } else if (videoUrl.includes("display_watermark_aigc")) {
+      logger.info(`视频URL包含VIP账号标识 (display_watermark_aigc)，VIP用户此URL为无水印版本`);
+    }
+
+    logger.info(`获取到视频URL: ${videoUrl}`);
+    return videoUrl;
   } catch (error) {
     logger.warn(`获取高质量视频下载URL失败: ${error.message}`);
     return null;
@@ -2222,7 +2280,8 @@ async function pollHistoryForVideoUrl(historyId: string, refreshToken: string): 
     }
   }
 
-  const videoUrl = item_list?.[0]?.result_url
+  const videoUrl = item_list?.[0]?.common_attr?.transcoded_video?.origin?.video_url
+    || item_list?.[0]?.result_url
     || item_list?.[0]?.video?.transcoded_video?.origin?.video_url
     || item_list?.[0]?.video?.play_url
     || item_list?.[0]?.video?.download_url
@@ -2791,6 +2850,7 @@ export async function generateInternationalSeedanceVideo(
     device_platform: "web",
     region: regionInfo.regionCode,
     os: "windows",
+    commerce_with_input_video: "1",
     web_component_open_flag: "1",
     web_version: "7.5.0",
     aigc_features: "app_lip_sync",
@@ -2974,7 +3034,12 @@ async function _generateInternationalSeedanceVideoWithHistoryId(
 
   // 使用直接请求（带 MD5 签名 + X-Bogus/X-Gnarly 签名）
   logger.info(`异步任务-国际Seedance: 发送 generate 请求...`);
-  const { aigc_data: generateData } = await request("post", "/mweb/v1/aigc_draft/generate", refreshToken, { data: generateBody });
+  const { aigc_data: generateData } = await request("post", "/mweb/v1/aigc_draft/generate", refreshToken, {
+    params: {
+      commerce_with_input_video: "1",
+    },
+    data: generateBody,
+  });
 
   const historyId = generateData?.history_record_id;
   if (!historyId) throw new APIException(EX.API_IMAGE_GENERATION_FAILED, `记录ID不存在: ${JSON.stringify(generateData)}`);

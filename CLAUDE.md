@@ -6,7 +6,7 @@
 
 即梦 AI 免费 API 服务 - 逆向工程的 API 服务器，提供 OpenAI 兼容接口，封装即梦 AI 的图像和视频生成能力。
 
-**版本：** v0.9.0
+**版本：** v0.9.1
 
 **核心功能：**
 - 文生图：支持 jimeng-5.0、jimeng-4.6、jimeng-4.5 等多款模型，最高 4K 分辨率，国内版和国际版统一入口
@@ -14,6 +14,7 @@
 - 视频生成：jimeng-video-3.5-pro 等模型，支持首帧/尾帧控制
 - Seedance 2.0：多模态智能视频生成，模型名 `jimeng-video-seedance-2.0`（兼容 `seedance-2.0`），支持图片/视频/音频混合上传，@1、@2 占位符引用素材，4-15 秒时长
 - 国际版视频：支持国际区域 Token（sg-/it-/jp-/hk- 等前缀），X-Bogus/X-Gnarly 纯算法签名绕过 shark 反爬，支持普通视频（jimeng-video-3.0/3.0-pro/3.5-pro）与 Seedance 的同步/异步两种模式
+- 国际版 VIP 无水印下载：VIP Token 自动获取无水印视频 URL，权益 API（benefit_metadata / batch_get_user_benefit）自动调用，水印状态检测日志
 - OpenAI 兼容：完全兼容 OpenAI API 格式，无缝对接现有客户端
 - 多账号支持：支持多个 sessionid 轮询使用
 
@@ -239,6 +240,18 @@ src/
   - 输入：查询字符串 + 请求体 + User-Agent → 输出：约 300 字符的 Base64 签名
 - 在 `core.ts` 的 `request()` 函数中，对国际版请求（`regionInfo.isInternational`）自动注入这两个签名
 - X-Bogus 直接拼接到 URL（避免 axios URL 编码破坏自定义 Base64 字符），X-Gnarly 作为 HTTP 头发送
+
+### 国际版 VIP 无水印视频下载（v0.9.1）
+- `fetchHighQualityVideoUrl()` 函数新增 VIP 无水印下载流程，匹配真实浏览器下载行为
+- **权益 API 调用**：获取视频 URL 后，自动调用 commerce API 处理 VIP `remove_watermark` 权益
+  - `POST /commerce/v3/resource/benefit_metadata` — 查询权益元数据
+  - `POST /commerce/v3/benefits/batch_get_user_benefit` — 批量查询用户权益
+  - 两个调用通过 `parseRegionFromToken` 自动判断国际版用户，失败时降级不影响主流程
+- **水印状态检测**：自动检测并记录返回视频 URL 的水印标识
+  - `lr=display_watermark_busi_aigc` → 免费账号（视频带水印）
+  - `lr=display_watermark_aigc` → VIP 账号（视频无水印，`lr` 仅是埋点标签）
+- **工作原理**：服务端根据 session 的 VIP 状态生成不同的签名 CDN URL，VIP 签名指向无水印视频文件
+- **URL 提取优化**：重构为统一 `videoUrl` 变量 + 级联降级策略，支持提取后统一后处理
 
 ### 文件上传
 - 支持 multipart/form-data 文件上传

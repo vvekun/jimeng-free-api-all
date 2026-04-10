@@ -28,7 +28,6 @@ for model in ["seedance-2.0-fast"]:
             "model": model,
             "prompt": "@image_file_1 中的人物开始微笑并转身",
             "ratio": "4:3",
-            "resolution": "720p",
             "duration": 4,
             "image_file_1": IMAGE_URL,
         },
