@@ -356,10 +356,10 @@ export async function generateImageComposition(
     
   let status = 20, failCode, item_list = [];
   let pollCount = 0;
-  const maxPollCount = 600; // 最多轮询10分钟
+  const maxPollCount = 60; // 最多轮询10分钟
 
   while (pollCount < maxPollCount) {
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    await new Promise((resolve) => setTimeout(resolve, 5000));
     pollCount++;
     
     if (pollCount % 30 === 0) {
@@ -643,10 +643,10 @@ async function generateMultiImages(
   let status = 20, failCode, item_list = [];
   let pollCount = 0;
   let prevItemCount = 0;
-  const maxPollCount = 600; // 最多轮询10分钟（600次 * 1秒）
+  const maxPollCount = 60; // 最多轮询10分钟
 
   while (pollCount < maxPollCount) {
-    await new Promise((resolve) => setTimeout(resolve, 1000)); // 每1秒轮询一次
+    await new Promise((resolve) => setTimeout(resolve, 5000));
     pollCount++;
     
     if (pollCount % 30 === 0) {
@@ -942,10 +942,10 @@ export async function generateImages(
 
   let status = 20, failCode, item_list = [];
   let pollCount = 0;
-  const maxPollCount = 600; // 最多轮询10分钟
+  const maxPollCount = 60; // 最多轮询10分钟
 
   while (pollCount < maxPollCount) {
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    await new Promise((resolve) => setTimeout(resolve, 5000));
     pollCount++;
 
     if (pollCount % 30 === 0) {
