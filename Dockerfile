@@ -36,6 +36,9 @@ COPY --from=BUILD_IMAGE /app/node_modules /app/node_modules
 
 WORKDIR /app
 
+# 使用 npmmirror 国内镜像加速 Chromium 下载（默认 CDN 在国内极慢）
+ENV PLAYWRIGHT_DOWNLOAD_HOST=https://cdn.npmmirror.com/binaries/playwright
+
 # 安装 Playwright Chromium 浏览器
 RUN npx playwright-core install chromium
 
