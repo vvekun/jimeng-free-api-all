@@ -365,7 +365,10 @@ export async function generateImageComposition(
     if (pollCount % 30 === 0) {
       logger.info(`图生图进度: 第 ${pollCount} 次轮询 (history_id: ${historyId})，当前状态: ${status}，已生成: ${item_list.length} 张图片...`);
     }
-    await notifyProcessing(callbackContext, 0, `图生图进度: 已轮询 ${pollCount} 次，已生成 ${item_list.length} 张图片`);
+    // 限流：每 6 次轮询（约 30 秒）推送一次进度，避免每秒回调打爆回调接收方导致 CPU 飙升
+    if (pollCount % 6 === 0) {
+      await notifyProcessing(callbackContext, 0, `图生图进度: 已轮询 ${pollCount} 次，已生成 ${item_list.length} 张图片`);
+    }
 
     const result = await request("post", "/mweb/v1/get_history_by_ids", refreshToken, {
       data: {
@@ -470,8 +473,11 @@ export async function generateImageComposition(
     }
   }
 
-  if (pollCount >= maxPollCount) {
-    logger.warn(`图生图超时: 轮询了 ${pollCount} 次，当前状态: ${status}，已生成图片数: ${item_list.length}`);
+  // 轮询到达上限仍无任何图片：判定为超时失败，避免回调为 completed 空结果且让上游队列卡死
+  if (pollCount >= maxPollCount && item_list.length === 0) {
+    logger.warn(`图生图超时: 轮询了 ${pollCount} 次仍无结果，当前状态: ${status}，标记为失败`);
+    await notifyFailed(callbackContext, 'GENERATION_TIMEOUT', '图生图超时，请稍后重试');
+    throw new APIException(EX.API_IMAGE_GENERATION_FAILED, `图生图超时（轮询 ${pollCount} 次无结果）`);
   }
 
   if (status === 30) {
@@ -762,8 +768,11 @@ async function generateMultiImages(
     }
   }
 
-  if (pollCount >= maxPollCount) {
-    logger.warn(`多图生成超时: 轮询了 ${pollCount} 次，当前状态: ${status}，已生成图片数: ${item_list.length}`);
+  // 轮询到达上限仍无任何图片：判定为超时失败（已生成部分图片则保留并正常返回）
+  if (pollCount >= maxPollCount && item_list.length === 0) {
+    logger.warn(`多图生成超时: 轮询了 ${pollCount} 次仍无结果，当前状态: ${status}，标记为失败`);
+    await notifyFailed(callbackContext, 'GENERATION_TIMEOUT', '多图生成超时，请稍后重试');
+    throw new APIException(EX.API_IMAGE_GENERATION_FAILED, `多图生成超时（轮询 ${pollCount} 次无结果）`);
   }
 
   if (status === 30) {
@@ -1076,8 +1085,11 @@ export async function generateImages(
     }
   }
 
-  if (pollCount >= maxPollCount) {
-    logger.warn(`文生图超时: 轮询了 ${pollCount} 次，当前状态: ${status}，已生成图片数: ${item_list.length}`);
+  // 轮询到达上限仍无任何图片：判定为超时失败，避免回调为 completed 空结果且让上游队列卡死
+  if (pollCount >= maxPollCount && item_list.length === 0) {
+    logger.warn(`文生图超时: 轮询了 ${pollCount} 次仍无结果，当前状态: ${status}，标记为失败`);
+    await notifyFailed(callbackContext, 'GENERATION_TIMEOUT', '文生图超时，请稍后重试');
+    throw new APIException(EX.API_IMAGE_GENERATION_FAILED, `文生图超时（轮询 ${pollCount} 次无结果）`);
   }
 
   if (status === 30) {
